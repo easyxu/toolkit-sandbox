@@ -3,7 +3,7 @@
     <parent>
         <artifactId>toolkit-sandbox</artifactId>
         <groupId>com.phoenix</groupId>
-        <version>1.0-SNAPSHOT</version>
+        <version>0.4.RELEASE</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -90,6 +90,13 @@
             <optional>true</optional>
         </dependency>
         <dependency>
+            <groupId>org.hibernate</groupId>
+            <artifactId>hibernate-entitymanager</artifactId>
+            <version>${hibernate.version}</version>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
             <groupId>mysql</groupId>
             <artifactId>mysql-connector-java</artifactId>
             <version>${mysql.version}</version>
@@ -162,11 +169,11 @@
                                             <!--仅保持类名不变，完全混淆类的其他信息 -->
                                             <class classes="private" methods="private" fields="none">
                                                 <patternset id="dal">
-                                                    <exclude name="com.phoenix.dal.hibernate.BaseDao" />
-                                                    <exclude name="com.phoenix.dal.hibernate.impl.BaseDaoImpl" />
-                                                    <exclude name="com.phoenix.dal.hibernate4.HibernateDaoSupport" />
-                                                    <exclude name="com.phoenix.dal.HibernateDao" />
-                                                    <exclude name="com.phoenix.model.Pager" />
+                                                    <include name="com.phoenix.dal.hibernate.BaseDao" />
+                                                    <include name="com.phoenix.dal.hibernate.impl.BaseDaoImpl" />
+                                                    <include name="com.phoenix.dal.hibernate4.HibernateDaoSupport" />
+                                                    <include name="com.phoenix.dal.HibernateDao" />
+                                                    <include name="com.phoenix.model.Pager" />
                                                 </patternset>
                                             </class>
 

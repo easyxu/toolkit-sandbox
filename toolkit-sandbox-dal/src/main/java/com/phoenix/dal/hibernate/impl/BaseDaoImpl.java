@@ -36,6 +36,11 @@ public class BaseDaoImpl<T extends Serializable, E extends Serializable> extends
 
     }
 
+    @Override
+    public void deleteByID(E pk) {
+        this.getHibernateTemplate().delete(this.findById(pk));
+    }
+
     /*
     * 查询所有结果
     *
@@ -94,9 +99,9 @@ public class BaseDaoImpl<T extends Serializable, E extends Serializable> extends
                         tableName = hql.substring(fromIndex);
                     }
 
-                    String countSql = "select count(o) from " + tableName + where;
+                    String countHql = "select count(o) from " + tableName + where;
                     // 得到所有的记录条数目
-                    queryCount = session.createQuery(countSql);
+                    queryCount = session.createQuery(countHql);
                     if (queryParams != null && !queryParams.isEmpty()) {
                         String[] namedParams = queryCount.getNamedParameters();
                         for (String key : namedParams) {
@@ -257,7 +262,6 @@ public class BaseDaoImpl<T extends Serializable, E extends Serializable> extends
             @Override
             public List<ANY> doInHibernate(Session session) throws HibernateException, SQLException {
                 // 分页的结果查询
-
                 SQLQuery queryList = session.createSQLQuery(sql);
                 if (queryParams != null && !queryParams.isEmpty()) {
                     String[] namedParams = queryList.getNamedParameters();

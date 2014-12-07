@@ -3,7 +3,7 @@
     <parent>
         <artifactId>toolkit-sandbox</artifactId>
         <groupId>com.phoenix</groupId>
-        <version>1.0-SNAPSHOT</version>
+        <version>0.4.RELEASE</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -253,8 +253,8 @@
                                             <!--仅保持类名不变，完全混淆类的其他信息 -->
                                             <class classes="private" methods="private" fields="none">
                                                 <patternset id="commons">
-                                                    <exclude name="**/regexp/**" />
-                                                    <exclude name="**/resource/**" />
+                                                    <include name="**/regexp/**" />
+                                                    <include name="**/resource/**" />
                                                     <include name="**/lang/ByteArray" />
                                                     <include name="**/spring/**" />
                                                     <include name="**/convert/**" />

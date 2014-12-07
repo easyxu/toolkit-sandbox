@@ -18,8 +18,10 @@ public class HibernateDaoSupport<T extends Serializable, ID extends Serializable
 	}
 
 
-
-
+	@Override
+	public void deleteByID(ID pk) {
+		delete(findById(pk));
+	}
 
 	@Override
 	public List<T> findAll() {

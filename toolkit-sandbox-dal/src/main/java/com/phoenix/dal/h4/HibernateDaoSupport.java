@@ -63,6 +63,11 @@ public class HibernateDaoSupport <T extends Serializable, ID extends Serializabl
     }
 
     @Override
+    public void deleteByID(ID pk) {
+        currentSession().delete(currentSession().get(t,pk));
+    }
+
+    @Override
     public T findById(ID pk) {
         return (T) currentSession().get(t,pk);
     }
@@ -102,16 +107,16 @@ public class HibernateDaoSupport <T extends Serializable, ID extends Serializabl
     /**
      * 分页返回Map集合
      * @param pager
-     * @param sql
+     * @param hql
      * @param queryParams
      * @return
      */
-    public  List<Map> pageableFindByHql(final Pager pager, final String sql,final  Map<String, Object> queryParams){
+    public  List<Map> pageableFindByHql(final Pager pager, final String hql,final  Map<String, Object> queryParams){
 
         return getHibernateTemplate().executeWithNativeSession(new HibernateCallback<List<Map>>() {
             @Override
             public List<Map> doInHibernate(Session session) throws HibernateException {
-                return pageFindByHql(pager, sql, session, queryParams, Transformers.ALIAS_TO_ENTITY_MAP);
+                return pageFindByHql(pager, hql, session, queryParams, Transformers.ALIAS_TO_ENTITY_MAP);
             }
         });
     }
@@ -119,16 +124,16 @@ public class HibernateDaoSupport <T extends Serializable, ID extends Serializabl
     /**
      * 分页返回List集合
      * @param pager
-     * @param sql
+     * @param hql
      * @param queryParams
      * @return
      */
-    public  List<List> pageableFindByHqlList(final Pager pager, final String sql,final  Map<String, Object> queryParams){
+    public  List<List> pageableFindByHqlList(final Pager pager, final String hql,final  Map<String, Object> queryParams){
 
         return getHibernateTemplate().executeWithNativeSession(new HibernateCallback<List<List>>() {
             @Override
             public List<List> doInHibernate(Session session) throws HibernateException {
-                return pageFindByHql(pager, sql, session, queryParams, Transformers.TO_LIST);
+                return pageFindByHql(pager, hql, session, queryParams, Transformers.TO_LIST);
             }
         });
     };
