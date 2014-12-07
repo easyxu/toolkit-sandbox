@@ -81,7 +81,7 @@
             <groupId>org.springframework</groupId>
             <artifactId>spring-context-support</artifactId>
             <version>${spring.version}</version>
-            <scope>provided</scope>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>org.hibernate</groupId>
@@ -169,6 +169,7 @@
                                             <!--仅保持类名不变，完全混淆类的其他信息 -->
                                             <class classes="private" methods="private" fields="none">
                                                 <patternset id="dal">
+                                                	<include name="com.phoenix.base.privilege.PrivilegeInfo" />
                                                     <include name="com.phoenix.dal.hibernate.BaseDao" />
                                                     <include name="com.phoenix.dal.hibernate.impl.BaseDaoImpl" />
                                                     <include name="com.phoenix.dal.hibernate4.HibernateDaoSupport" />

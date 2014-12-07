@@ -18,7 +18,8 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <deploy.url>file:///home/xux/git/repository</deploy.url>
+    <!--  file:///home/xux/git/repository-->
+    <deploy.url>file://E:/GitHub/repository</deploy.url>
     <java.version>1.7</java.version>
     <guava.version>18.0</guava.version>
     <slf4j.version>1.7.7</slf4j.version>
