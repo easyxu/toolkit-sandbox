@@ -1,0 +1,1519 @@
+/* =======================================================================
+ * 语法文件: StandardParser.jj - 标准属性文件的语法.
+ *
+ * 此文件经JavaCC编译成Java源程序, 用来解析属性文件.
+ * 此文件使用了USER_CHAR_STREAM选项, 因此还需要如下从CharStream派生的类:
+ *   com.za.common.property.parser.std.SimpleCharStreamCR
+ *   com.za.common.property.parser.std.JavaCharStreamCR
+ * 分别解析标准的输入流, 以及包含unicode转义符的输入流(Java风格).
+ *
+ * 具体的说明参见下列Parser类的Java文档:
+ *   com.za.common.property.parser.std.StandardParser
+ *
+ * @author <a href="mailto:zyh@alibaba-inc.com">Michael Zhou</a>
+ * @version $Id$
+ * ======================================================================= */
+
+options {
+    STATIC              = false;
+    UNICODE_INPUT       = true;
+    USER_CHAR_STREAM    = true;
+
+    DEBUG_TOKEN_MANAGER = false;
+    DEBUG_PARSER        = false;
+
+    COMMON_TOKEN_ACTION = true;
+}
+
+PARSER_BEGIN(StandardParser)
+
+package com.za.common.property.parser.std;
+
+import java.util.List;
+import java.util.ArrayList;
+
+import java.io.InputStream;
+import java.io.Reader;
+import java.io.StringReader;
+import java.io.InputStreamReader;
+import java.io.IOException;
+
+import com.za.common.logging.Logger;
+import com.za.common.logging.LoggerFactory;
+import com.za.common.property.parser.Parser;
+import com.za.common.property.parser.Locator;
+import com.za.common.property.parser.ParseHandler;
+
+/**
+ * 这是一个增强的标准属性文件解析器.
+ * <p>
+ * 传统型的属性文件被广泛运用于书写系统配置文件以及国际化
+ * (通过<code>java.util.PropertyResourceBundle</code>)领域.
+ * 传统型的属性文件可被<code>java.util.Properties</code>读取.
+ * <p>
+ * 传统的通过<code>java.util.Properties</code>类读取的属性文件有如下缺点:
+ * <ul>
+ *   <li> 只能从InputStream读入(ISO8859-1), 无法读入国际字符(如中文).
+ *   <li> 属性通过<code>java.util.Properties</code>类读入以后,
+ *        它们之间的顺序是不确定的, 不能保持属性在文件中出现的顺序.
+ *   <li> 难以表现复杂的文本信息.  例如包含多个换行的文本.
+ * </ul>
+ * 这个增强型的解析器完全兼容传统的属性文件, 但提供了更非富的格式和控制.
+ * 它的基本用法如下:
+ * <pre>
+ *   # 这是注解, 由“#”开始.
+ *   ! 这也是注解, 由“!”开始.
+ *
+ *   # 最简单的定义.  "key"的值为"value", 两端的空白被去掉.
+ *   key = value                                # 这里也可以写注解
+ *
+ *   # 如果一行太长, 可以这样换行.  "longvalue"的值为"aaaa bbbb".
+ *   longvalue = aaaa \                         # 这里也可以写注解, 但和反斜杠之间至少要有一个空白.
+ *               bbbb
+ *
+ *   # 数组, 用逗号分隔.
+ *   # 这样, "tokens[0]"的值为"first token", "tokens[1]"的值为"second token".
+ *   tokens = first token, second token
+ *
+ *   # 也可以把数组分成多行, 只要前面的key相同, 就被解释成数组.
+ *   # 这样的效果同上.
+ *   tokens_multiple_lines = first token
+ *   tokens_multiple_lines = second token
+ *
+ *   # 如果出现逗号, 需要用反斜杠转义.
+ *   commas.escaped = Hi\, what's up?
+ *
+ *   # 可以用双引号字符串.
+ *   double_quote_string = "Hi, what's up?"     # 这里逗号就不会引起歧义.
+ *
+ *   # 可以用单引号字符串.
+ *   single_quote_string = 'Hi, what\'s up?'    # 这里需要对单引号转义.
+ * </pre>
+ * 增强的用法如下:
+ * <pre>
+ *   #!PROPERTIES ENCODING="GBK" UESC           # 在文件的首行加上声明, 可以指定正确的编码方法,
+ *                                              # 以及是否使用Java风格的Unicode转义字符.
+ *
+ *   #!BASE my.document.info
+ *   author      = michael                      # 等同于 my.document.info.author
+ *   modifyDate  = April 29\, 2001              # 等同于 my.document.info.modifyDate
+ *   version     = 1.2.3                        # 等同于 my.document.info.version
+ *
+ *   #!BASE $base.author
+ *   lastname    = Zhou                         # 等同于 my.document.info.author.lastname
+ *   firstname   = Michael                      # 等同于 my.document.info.author.firstname
+ *
+ *   #!BASE $parent                             # 上溯一级, 即 my.document.info 状态
+ *   #!BASE $parent.$parent                     # 上溯两级, 即 my 状态
+ *   #!BASE                                     # 回复最初状态.
+ *
+ *   #!INCLUDE "/path/to/file"                  # 包含另一个属性文件.
+ *                                              # 该文件的所有属性受上述BASE命令控制.
+ *
+ *   # 更灵活的表示方法
+ *
+ *   # 可以出现以下转义符: "\n", "\r", "\f", "\b", "\t", "\\", "\'", "\""等.
+ *   double_quote_string = "he said, \"hello\"\n"
+ *   simple_string = he said\, "hello"\n
+ *
+ *   # 单引号字符串不转义:
+ *   single_quote_string = 'this is NOT a carriage return \n'
+ *
+ *   # 大块字符的表示
+ *   chunk = &lt;&lt;END_OF_CHUNK                     # 以下是一块文字, 里面也可以包括转义字符.
+ *     This
+ *         is a
+ *      fREe
+ *        format
+ *             DesCRiption.
+ * END_OF_CHUNK                                 # 注意: 这一行一定要顶格
+ *
+ *   # 无转义的大块字符的表示
+ *   chunk = &lt;END_OF_CHUNK                      # 注意, 只有一个"&lt;".  这种方式不转义字符.
+ *     This
+ *         is a
+ *      fREe
+ *        format
+ *             DesCRiption.
+ * END_OF_CHUNK                                 # 注意: 这一行一定要顶格
+ *
+ *   # 可以直接写明数组的下标, 数组可以是多维的.
+ *   array[0] = 1
+ *   array[1] = 2
+ *   array[1][0] = 3
+ *   array[1][1] = 4
+ *
+ *   # 不规则的key, 可以用单引号或双引号括起来.
+ *   calculate."1 + 2 + 3".value = 6
+ *
+ *   # 可以引用别的属性.
+ *   my.class.path = ${sys.class.path}:/a/b/c.jar               # ${...}将被取代.
+ *   escape.the.reference = \${sys.class.path}:/a/b/c.jar       # 可以用\${...}避免引用.
+ * </pre>
+ * 本解析器没有被设计成线程安全的, 所以不能被多个线程同时访问.
+ *
+ * @author <a href="mailto:zyh@za-inc.com">Michael Zhou</a>
+ * @version $Id$
+ * @see java.util.Properties
+ * @see com.za.common.property.Property
+ * @see com.za.common.property.parser.Parser
+ */
+
+public class StandardParser implements Parser {
+
+    /** Parser记录器. */
+    protected final static Logger log                   = LoggerFactory.getLogger("property.StandardParser");
+
+    /** 默认encoding方法. */
+    protected final static String DEFAULT_ENCODING      = "UTF8";
+
+    /** 处理parse过程中的事件. */
+    private ParseHandler handler;
+
+    /** 当前的encoding方法. */
+    private String encoding                             = DEFAULT_ENCODING;
+
+    /** 是否使用和Java一样的Unicode Escape方式. */
+    private boolean supportUnicodeEscape                = false;
+
+    /** 取得当前的行号列号信息. */
+    private final Locator locator                       = new Locator() {
+        public int getLineNumber() {
+            return token == null ? 0 : token.endLine;
+        }
+        public int getColumnNumber() {
+            return token == null ? 0 : token.endColumn;
+        }
+        public String getResourceId() {
+            return "not available";
+        }
+        public String toString() {
+            return "line " + getLineNumber() + ", column " + getColumnNumber();
+        }
+    };
+
+    /**
+     * 默认构造方法, 构造一个空的parser.
+     * 使用前需要用init方法初始化.
+     */
+    public StandardParser() {
+        this (new SimpleCharStreamCR(new StringReader("\n"), 1, 1));
+    }
+
+    /**
+     * 返回当前的编码方式.
+     */
+    public String getEncoding() {
+        return encoding;
+    }
+
+    /**
+     * 如果当前解析器支持转义unicode字符, 则返回<code>true</code>.
+     */
+    public boolean unicodeEscapeSupported() {
+        return supportUnicodeEscape;
+    }
+
+    /**
+     * 设置Parse处理对象.
+     */
+    public void setParseHandler(ParseHandler handler) {
+        this.handler = handler;
+    }
+
+    /**
+     * 接收输入流.  输入流必须是支持<code>mark/reset</code>的.
+     * <p>
+     * 该方法首先尝试分析输入流的第一行, 从而判别文件的格式.  如果文件首行包含了
+     * 属性文件的声明: <code>#!properties encoding="..." uesc="..."</code>,
+     * 则正确的<code>encoding</code>和<code>unicode escape</code>方法将被设置.
+     * 否则使用默认的<code>encoding</code>(<code>UTF8</code>), <code>unicode escape</code>
+     * 为<code>no</code>.
+     * <p>
+     * 输入流被接收以后, 就可以执行<code>parse()</code>方法了.
+     *
+     * @param is 输入流
+     * @return 如果文件被识别, 则返回<code>true</code>.  但返回<code>false</code>并不意味
+     *         着的文件格式非法, 只是说明文件没有写<code>#!properties...</code>语句.
+     * @throws com.za.common.property.parser.ParseException
+     */
+    public boolean accept(InputStream is) throws com.za.common.property.parser.ParseException {
+        try {
+            Reader reader           = null;
+            byte[] lookAhead        = new byte[200];
+            boolean accepted        = false;
+
+            // 设置初始值.
+            encoding                = DEFAULT_ENCODING;
+            supportUnicodeEscape    = false;
+
+            // 预读输入流.
+            is.mark(lookAhead.length);
+            int bytesRead = is.read(lookAhead);
+            is.reset();
+
+            // 分析第一行.
+            int len = 0;
+            for (int i = 0; i < bytesRead; i++) {
+                if (lookAhead[i] == '\r') {
+                    if (i + 1 < bytesRead && lookAhead[i + 1] == '\n') {
+                        len = i + 2;
+                    } else {
+                        len = i + 1;
+                    }
+                    break;
+                } else if (lookAhead[i] == '\n') {
+                    len = i + 1;
+                    break;
+                }
+            }
+
+            if (len > 0) {
+                reader = new StringReader(new String(lookAhead, 0, len, encoding));
+                ReInit(supportUnicodeEscape ? (CharStream) new JavaCharStreamCR(reader, 1, 1)
+                                            : (CharStream) new SimpleCharStreamCR(reader, 1, 1));
+                try {
+
+                    // 试着分析第一行, 如果成功, 则encoding和supportUnicodeEscape将被设置成指定值.
+                    token_source.clearStateStack();
+                    DirectiveDeclare();
+
+                    // 第一行分析成功, 重新初始化parser, 使之继续读取后续行.
+                    accepted = true;
+                    is.skip(len);
+                    reader = new InputStreamReader(is, encoding);
+                    ReInit(supportUnicodeEscape ? (CharStream) new JavaCharStreamCR(reader, 2, 1)
+                                                : (CharStream) new SimpleCharStreamCR(reader, 2, 1));
+                } catch (ParseException e) {
+
+                    // 失败则恢复到默认值.
+                    encoding = DEFAULT_ENCODING;
+                    supportUnicodeEscape = false;
+                }
+            }
+
+            // 分析第一行失败, 使用默认值初始化parser.
+            if (!accepted) {
+                reader = new InputStreamReader(is, encoding);
+                ReInit(supportUnicodeEscape ? (CharStream) new JavaCharStreamCR(reader, 1, 1)
+                                            : (CharStream) new SimpleCharStreamCR(reader, 1, 1));
+            }
+
+            if (log.isDebugEnabled()) {
+                log.debug("Parser initialized.");
+                log.debug("Current encoding is set to " + encoding
+                          + (supportUnicodeEscape ? ", and supports Java-style Unicode Escaping" : "") + ".");
+            }
+
+            return accepted;
+
+        } catch (IOException e) {
+            throw new com.za.common.property.parser.ParseException(e);
+        }
+    }
+
+    /**
+     * 开始解析文件.
+     *
+     * @throws com.za.common.property.parser.ParseException
+     */
+    public void parse() throws com.za.common.property.parser.ParseException {
+        if (handler == null) {
+            throw new com.za.common.property.parser.ParseException(
+                    "Parse handler should be set before parsing.");
+        }
+        token_source.clearStateStack();
+        handler.setLocator(locator);
+        handler.start();
+        try {
+            Start();
+        } catch (ParseException e) {
+            throw new com.za.common.property.parser.ParseException(e);
+        } catch (TokenMgrError tme) {
+            throw new com.za.common.property.parser.ParseException(tme);
+        } catch (PassException pe) {
+            throw pe.exception;
+        }
+        handler.end();
+    }
+
+    /**
+     * 由于JavaCC生成的程序不能throw别的exception, 只好通过这个类, 把Handler里面的
+     * exception"偷运"出来.
+     */
+    private static class PassException extends RuntimeException {
+        com.za.common.property.parser.ParseException exception;
+        public PassException(com.za.common.property.parser.ParseException e) {
+            exception = e;
+        }
+    }
+
+    public static void main(String args[]) throws Exception {
+        org.apache.log4j.PropertyConfigurator.configure("c:\\log4j.conf");
+
+        ParseHandler handler = new com.za.common.property.parser.helpers.DefaultHandler();
+        try {
+            StandardParser parser = new StandardParser();
+            parser.accept(new java.io.BufferedInputStream(new java.io.FileInputStream("c:\\a.xml")));
+            parser.setParseHandler(handler);
+            parser.parse();
+        } catch (com.za.common.property.parser.ParseException e) {
+            e.printStackTrace();
+        }
+        handler.getRootProperty().display(new java.io.OutputStreamWriter(System.out));
+    }
+}
+
+PARSER_END(StandardParser)
+
+TOKEN_MGR_DECLS :
+{
+    // TokenManager记录器.
+    protected static Logger log = LoggerFactory.getLogger("property.StandardParser.TokenManager");
+
+    // 状态栈.
+    private List stateStack = new ArrayList();
+
+    /**
+     * 清除所有状态到初始值.
+     * 切记! 每次ReInit()以后, 一定要调用此方法, 才可继续解析文件.
+     */
+    public void clearStateStack() {
+        stateStack.clear();
+    }
+
+    /**
+     * 确保当<EOF>返回时，状态为DEFAULT.
+     */
+    void CommonTokenAction(Token t) {
+        if (log.isDebugEnabled()) {
+            log.debug("Matched token " + tokenImage[t.kind]
+                      + (t.kind == EOF ? "" : ": \"" + TokenMgrError.addEscapes(t.image) + "\"."));
+        }
+        if (t.kind == EOF && curLexState != DEFAULT) {
+            if (log.isDebugEnabled()) {
+                log.debug("Unexpected End Of File.  Lexical state "
+                          + lexStateNames[DEFAULT] + " expected, but was " + lexStateNames[curLexState] + ".");
+            }
+            throw new TokenMgrError("Unexpected End Of File.", TokenMgrError.INVALID_LEXICAL_STATE);
+        }
+    }
+
+    /**
+     * 将当前状态压入栈，将当前状态设为指定的新状态.
+     *
+     * @param newState 新状态.
+     */
+    private void pushLexState(int newState) {
+        stateStack.add(new Integer(curLexState));
+        SwitchTo(newState);
+    }
+
+    /**
+     * 从栈中恢复状态.  如果栈为空, 则设置为DEFAULT状态.
+     *
+     * @return 如果栈为空, 则返回false, 否则返回true.
+     */
+    private boolean popLexState() {
+        int lastIndex = stateStack.size() - 1;
+        if (lastIndex < 0) {
+            SwitchTo(DEFAULT);
+            return false;
+        }
+        SwitchTo(((Integer) stateStack.remove(lastIndex)).intValue());
+        return true;
+    }
+
+    /**
+     * 将换行符放回stream.  如果最后一次读取的不是换行符, 则不做任何事.
+     */
+    private void putbackNewLine() {
+        int length = image.length();
+        if (length >= 1) {
+            char c = image.charAt(length - 1);  // 取得最后一个字符
+            if (c == '\r' || c == '\n') {
+                input_stream.backup(1);
+            }
+        }
+    }
+
+    /**
+     * 将"\n", "\r"之类换义字符串替换为它所表示的字符.
+     */
+    private void unescapeChar() {
+        int lastIndex = image.length() - 1;
+        char c = image.charAt(lastIndex);
+        char translated;
+        switch (c) {
+            case 'n': translated = '\n'; break;
+            case 't': translated = '\t'; break;
+            case 'b': translated = '\b'; break;
+            case 'r': translated = '\r'; break;
+            case 'f': translated = '\f'; break;
+            default:  translated = c;
+        }
+        image.setCharAt(lastIndex - 1, translated);
+        image.setLength(lastIndex);
+    }
+
+    /**
+     * 将"\x"替换成"x", 即忽略前置的反斜杠.
+     */
+    private void unescapeCharSimple() {
+        int lastIndex = image.length() - 1;
+        char c = image.charAt(lastIndex);
+        image.setCharAt(lastIndex - 1, c);
+        image.setLength(lastIndex);
+    }
+
+    /**
+     * 文本缓冲区及相关变量.
+     * 用于辅助解析简单串, 单引号块, 双引号块.
+     */
+    private StringBuffer textBlock = new StringBuffer();
+    private String       blockEndTag;
+    private int          lastNonspaceIndex = 0;
+    private boolean      multipartString   = false;
+    private int          startIndex        = 0;
+
+    /**
+     * 保存文本缓冲区最后一个非空字符的索引.
+     */
+    private void appendTextBlock(boolean forceUpdateNonspaceIndex) {
+        char c = image.charAt(image.length() - 1);
+        textBlock.append(c);
+        if (forceUpdateNonspaceIndex || c > ' ') {
+            lastNonspaceIndex = textBlock.length();
+        }
+    }
+}
+
+/* ======================================================================
+
+   词法分析器(TokenManager)说明
+   ============================
+
+    我们将所有的状态归类成几个大类，每个大类有固定的入口和出口。
+    大类之间只能通过这些入口互相调用，使状态的变化更清晰。
+    大类之间的调用通过一个状态栈来实现。类似调用子程序。
+
+    ----------
+   | 初始状态 |
+    ----------
+
+    DEFAULT
+    -------
+
+    SKIP  :  空格, 换行
+    TOKEN :  INTEGER_LITERAL, IDENTIFIER, "=", ".", "[", "]", 变量
+    CALL  :  注解, 指令, 单引号串, 双引号串, 求值
+
+    ------
+   | 指令 |
+    ------
+
+    IN_PRE_DIRECTIVE(入口)
+    ----------------------
+
+    SKIP  :
+    TOKEN :  DIRECTIVE_DECLARE, DIRECTIVE_INCLUDE, DIRECTIVE_BASE, DIRECTIVE_NAME
+    CALL  :
+
+    IN_DIRECTIVE
+    ------------
+
+    SKIP  :  空格
+    TOKEN :  INTEGER_LITERAL, IDENTIFIER, "=", ".", "[", "]", 变量, ENCODING, UESC, 换行(返回)
+    CALL  :  注解, 单引号串, 双引号串
+
+    ------
+   | 求值 |
+    ------
+
+    IN_PRE_VALUES(入口)
+    -------------------
+
+    SKIP  :  空格
+    TOKEN :
+    CALL  :
+
+    IN_VALUES
+    ---------
+
+    SKIP  :  空格
+    TOKEN :  ",", 换行(返回)
+    CALL  :  注解, 简易串, 单引号串, 双引号串(扩展), 单引号块, 双引号块
+
+    ----------------
+   | 双引号串(扩展) |
+    ----------------
+
+    IN_DQ_STRING_EX(入口)
+    -------------------------
+
+    SKIP  :
+    TOKEN :  DQ_STRING_PART, DQ_STRING(返回)
+    CALL  :  引用
+
+    --------
+   | 简易串 |
+    --------
+
+    IN_SIMPLE_STRING(入口)
+    ----------------------
+
+    SKIP  :  行尾空格
+    TOKEN :  SIMPLE_STRING_PART, SIMPLE_STRING(返回)
+    CALL  :  引用
+
+    IN_SIMPLE_STRING_NEW_LINE
+    -------------------------
+
+    SKIP  :  空格, 换行
+    TOKEN :
+    CALL  :  注解
+
+    ----------
+   | 双引号块 |
+    ----------
+
+    IN_PRE_DQ_BLOCK(入口)
+    ---------------------
+
+    SKIP  :  空格, 换行
+    TOKEN :
+    CALL  :  注解
+
+    IN_DQ_BLOCK
+    -----------
+
+    SKIP  :
+    TOKEN :  DQ_BLOCK_PART, DQ_BLOCK(返回)
+    CALL  :  引用
+
+    ----------
+   | 单引号块 |
+    ----------
+
+    IN_PRE_SQ_BLOCK(入口)
+    ---------------------
+
+    SKIP  :  空格, 换行
+    TOKEN :
+    CALL  :  注解
+
+    IN_SQ_BLOCK
+    -----------
+
+    SKIP  :
+    TOKEN :  SQ_BLOCK(返回)
+    CALL  :
+
+    ------
+   | 引用 |
+    ------
+
+    IN_REFERENCE(入口)
+    ------------------
+
+    SKIP  :  空格, 换行, "}"(返回)
+    TOKEN :  INTEGER_LITERAL, IDENTIFIER, ".", "[", "]", 变量
+    CALL  :  注解, 单引号串, 双引号串
+
+    ----------
+   | 双引号串 |
+    ----------
+
+    IN_DQ_STRING(入口)
+    ------------------
+
+    SKIP  :
+    TOKEN :  DQ_STRING(返回)
+    CALL  :
+
+    ----------
+   | 单引号串 |
+    ----------
+
+    IN_SQ_STRING(入口)
+    ------------------
+
+    SKIP  :
+    TOKEN :  SQ_STRING(返回)
+    CALL  :
+
+    ------
+   | 注解 |
+    ------
+
+    IN_COMMENT(入口)
+    ----------------
+
+    SKIP  :  所有字符, 换行(返回)
+    TOKEN :
+    CALL  :
+
+ * ====================================================================== */
+
+/*
+ * 内部Tokens, 用来简化后面的token表达式.
+ */
+
+<DEFAULT> TOKEN :
+{
+    < #_SPACE : ["\t", "\f", " "] >
+|   < #_NEW_LINE : ("\r" | "\n" | "\r\n") >
+|   < #_SPACE_OR_NEW_LINE : ( (<_SPACE>)+ (<_NEW_LINE>)? | <_NEW_LINE> ) >
+|   < #_ESCAPED_CHAR : ["n", "t", "b", "r", "f", "\\", "'", "\"", "[", "]", "#", "!", ",", "$", "{", "}", "<"] >
+|   < #_IDENTIFIER : (<_LETTER>|<_DIGIT>)+ >
+|   < #_LETTER : [
+       "-", "A"-"Z", "_", "a"-"z",
+       "\u00c0"-"\u00d6",
+       "\u00d8"-"\u00f6",
+       "\u00f8"-"\u00ff",
+       "\u0100"-"\u1fff",
+       "\u3040"-"\u318f",
+       "\u3300"-"\u337f",
+       "\u3400"-"\u3d2d",
+       "\u4e00"-"\u9fff",
+       "\uf900"-"\ufaff"
+    ] >
+|   < #_DIGIT : [
+       "0"-"9",
+       "\u0660"-"\u0669",
+       "\u06f0"-"\u06f9",
+       "\u0966"-"\u096f",
+       "\u09e6"-"\u09ef",
+       "\u0a66"-"\u0a6f",
+       "\u0ae6"-"\u0aef",
+       "\u0b66"-"\u0b6f",
+       "\u0be7"-"\u0bef",
+       "\u0c66"-"\u0c6f",
+       "\u0ce6"-"\u0cef",
+       "\u0d66"-"\u0d6f",
+       "\u0e50"-"\u0e59",
+       "\u0ed0"-"\u0ed9",
+       "\u1040"-"\u1049"
+    ] >
+|   < #_DECIMAL_LITERAL : ["1"-"9"] (["0"-"9"])* >
+|   < #_HEX_LITERAL     : "0" ["x","X"] (["0"-"9","a"-"f","A"-"F"])+ >
+|   < #_OCTAL_LITERAL   : "0" (["0"-"7"])* >
+
+|   <#_SQ  : "'">
+|   <#_DQ  : "\"">
+|   <#_REF : "${">
+}
+
+/*
+ * 简单token, 即不需要状态的转换即可确定的token.
+ */
+
+<IN_DIRECTIVE> TOKEN [IGNORE_CASE] :
+{
+    <ENCODING : "encoding">
+|   <UESC     : "uesc">
+}
+
+<DEFAULT, IN_DIRECTIVE, IN_REFERENCE> TOKEN :
+{
+    <INTEGER_LITERAL : <_DECIMAL_LITERAL> | <_HEX_LITERAL> | <_OCTAL_LITERAL>>
+|   <IDENTIFIER : <_IDENTIFIER>>
+|   <DOT : ".">
+|   <LBRACKET : "[">
+|   <RBRACKET : "]">
+|   <VAR : "$" <_IDENTIFIER>>
+    {
+        matchedToken.image = image.substring(1);
+    }
+}
+
+<DEFAULT, IN_DIRECTIVE> TOKEN :
+{
+    <EQUALS : "=">
+    {
+        // DEFAULT状态碰到"=", 则调用求值过程.
+        if (curLexState == DEFAULT) {
+            pushLexState(IN_PRE_VALUES);
+        }
+    }
+}
+
+<IN_VALUES> TOKEN :
+{
+    <COMMA : ","> : IN_PRE_VALUES
+}
+
+<IN_DIRECTIVE, IN_VALUES> TOKEN :
+{
+    <CR : <_NEW_LINE>>
+    {
+        popLexState();
+    }
+}
+
+/*
+ * 默认状态.
+ */
+
+<DEFAULT> SKIP :
+{
+    <<_SPACE>>
+|   <<_NEW_LINE>>
+}
+
+/*
+ * 注解.
+ * 注释是以"#"开始, 到换行结束.
+ * 最后的换行符将被保留在输入流中, 供后面的程序读取.
+ */
+
+<DEFAULT, IN_DIRECTIVE, IN_VALUES, IN_SIMPLE_STRING_PRE_NEW_LINE, IN_REFERENCE, IN_PRE_SQ_BLOCK, IN_PRE_DQ_BLOCK> SKIP :
+{
+    <("#" | "!") ~["!"]>
+    {
+        input_stream.backup(1);
+        pushLexState(IN_COMMENTS);
+    }
+}
+
+<IN_COMMENTS> SKIP :
+{
+    <<_NEW_LINE>>
+    {
+        putbackNewLine();
+        popLexState();
+    }
+|   <~[]>
+}
+
+/*
+ * 单引号字符串.
+ * 单引号中可以用"\\", "\'"来表示反斜扛和单引号, 其余所有字符保持原样(不换义).
+ */
+
+<DEFAULT, IN_DIRECTIVE, IN_REFERENCE> SKIP :
+{
+    <<_SQ>>
+    {
+        pushLexState(IN_SQ_STRING);
+    }
+}
+
+<IN_PRE_VALUES> SKIP :
+{
+    <<_SQ>>
+    {
+        SwitchTo(IN_VALUES);
+        pushLexState(IN_SQ_STRING);
+    }
+}
+
+<IN_SQ_STRING> MORE :
+{
+    <~["'", "\\", "\r", "\n"]>
+|   <"\\" ["\\", "'"]>
+    {
+        unescapeCharSimple();
+    }
+|   "\\"
+}
+
+<IN_SQ_STRING> TOKEN :
+{
+    <SQ_STRING : <_SQ>>
+    {
+        matchedToken.image = image.substring(0, image.length() - 1);
+        popLexState();
+    }
+}
+
+/*
+ * 双引号字符串.
+ * 双引号中可以包括换义字符如"\n", "\r"等.
+ */
+
+<DEFAULT, IN_DIRECTIVE, IN_REFERENCE> SKIP :
+{
+    <<_DQ>>
+    {
+        pushLexState(IN_DQ_STRING);
+    }
+}
+
+<IN_DQ_STRING> MORE :
+{
+    <~["\"", "\\", "\r", "\n"]>
+|   <"\\" <_ESCAPED_CHAR>>
+    {
+        unescapeChar();
+    }
+}
+
+<IN_DQ_STRING, IN_DQ_STRING_EX> TOKEN :
+{
+    <DQ_STRING : <_DQ>>
+    {
+        matchedToken.image = image.substring(0, image.length() - 1);
+        popLexState();
+    }
+}
+
+/*
+ * 指令.
+ * 指令由"#!"或"!!"开始, 到换行结束.
+ * 紧接"#!"或"!!"为指令名(大小写不敏感), 接着的格式取决于指令类型.
+ */
+
+<DEFAULT> MORE :
+{
+    <"#!" | "!!">
+    {
+        pushLexState(IN_PRE_DIRECTIVE);
+    }
+}
+
+<IN_PRE_DIRECTIVE> TOKEN [IGNORE_CASE]:
+{
+    <DIRECTIVE_DECLARE : "properties" <_SPACE_OR_NEW_LINE>>
+    {
+        putbackNewLine();
+        SwitchTo(IN_DIRECTIVE);
+    }
+|   <DIRECTIVE_INCLUDE : "include" <_SPACE_OR_NEW_LINE>>
+    {
+        putbackNewLine();
+        SwitchTo(IN_DIRECTIVE);
+    }
+|   <DIRECTIVE_BASE    : "base" <_SPACE_OR_NEW_LINE>>
+    {
+        putbackNewLine();
+        SwitchTo(IN_DIRECTIVE);
+    }
+|   <DIRECTIVE_NAME    : "name" <_SPACE_OR_NEW_LINE>>
+    {
+        putbackNewLine();
+        SwitchTo(IN_DIRECTIVE);
+    }
+}
+
+<IN_DIRECTIVE> SKIP :
+{
+    <<_SPACE>>
+}
+
+/*
+ * 求值状态.  需要Parser的帮助才能进入此状态.
+ * 在此状态中可以接收各种类型的字符串和字符块.
+ * 遇到换行结束.
+ */
+
+<IN_PRE_VALUES, IN_VALUES> SKIP :
+{
+    <<_SPACE>>
+}
+
+/*
+ * 双引号字符串(扩展).
+ * 双引号中可以包括换义字符如"\n", "\r"等.
+ * 还可以引用其它的属性: ${...}
+ */
+
+<IN_PRE_VALUES> SKIP :
+{
+    <<_DQ>>
+    {
+        SwitchTo(IN_VALUES);
+        pushLexState(IN_DQ_STRING_EX);
+    }
+}
+
+<IN_DQ_STRING_EX> MORE :
+{
+    <~["$", "\"", "\\", "\r", "\n"]>
+|   <"\\" <_ESCAPED_CHAR>> { unescapeChar(); }
+|   <"$" ~["{"]>
+    {
+        input_stream.backup(1);
+        image.setLength(image.length() - 1);
+    }
+}
+
+<IN_DQ_STRING_EX> TOKEN :
+{
+    <DQ_STRING_PART : <_REF>>
+    {
+        matchedToken.image = image.substring(0, image.length() - lengthOfMatch);
+        pushLexState(IN_REFERENCE);
+    }
+}
+
+/*
+ * 单引号字符块.
+ * 字符块从"<", IDENTIFIER, NEW_LINE开始, 到第一个同样的IDENTIFIER结束.
+ * 作为结束符的IDENTIFIER必须位于行首.
+ * 类似单引号字符串, 单引号字符串并不转换转义字符.
+ */
+
+<IN_PRE_VALUES> SKIP :
+{
+    <"<" <_IDENTIFIER>>
+    {
+        blockEndTag = image.substring(1);
+        textBlock.setLength(0);
+        SwitchTo(IN_VALUES);
+        pushLexState(IN_PRE_SQ_BLOCK);
+    }
+}
+
+<IN_PRE_SQ_BLOCK> SKIP :
+{
+    <<_SPACE>>
+|   <<_NEW_LINE>>
+    {
+        input_stream.backup(1);
+        startIndex = 1;
+        SwitchTo(IN_SQ_BLOCK);
+    }
+}
+
+<IN_SQ_BLOCK> SKIP :
+{
+    <<_NEW_LINE> <_IDENTIFIER> (<_SPACE>)* ("," | "#" | "!" | "\\" | "\r" | "\n")>
+    {
+        input_stream.backup(1);
+        if (image.substring(image.charAt(1) > ' ' ? 1 : 2, image.length() - 1).trim().equals(blockEndTag)) {
+            if (textBlock.length() <= 0) {
+                startIndex = 0;
+            }
+            SwitchTo(IN_SQ_BLOCK_END);
+        } else {
+            textBlock.append(image.substring(0, image.length() - 1));
+        }
+    }
+|   <"\\\\" | ~[]>
+    {
+        textBlock.append(image.charAt(0));
+    }
+}
+
+<IN_SQ_BLOCK_END> TOKEN :
+{
+    <SQ_BLOCK : ~[]>
+    {
+        input_stream.backup(1);
+        matchedToken.image = textBlock.substring(startIndex);
+        popLexState();
+    }
+}
+
+/*
+ * 双引号字符块.
+ * 字符块从"<<", IDENTIFIER, NEW_LINE开始, 到第一个同样的IDENTIFIER结束.
+ * 作为结束符的IDENTIFIER必须位于行首.
+ * 类似双引号字符串, 可以包括换义字符如"\n", "\r"等.
+ */
+
+<IN_PRE_VALUES> SKIP :
+{
+    <"<<" <_IDENTIFIER>>
+    {
+        blockEndTag = image.substring(2);
+        textBlock.setLength(0);
+        SwitchTo(IN_VALUES);
+        pushLexState(IN_PRE_DQ_BLOCK);
+    }
+}
+
+<IN_PRE_DQ_BLOCK> SKIP :
+{
+    <<_SPACE>>
+|   <<_NEW_LINE>>
+    {
+        input_stream.backup(1);
+        startIndex = 1;
+        SwitchTo(IN_DQ_BLOCK);
+    }
+}
+
+<IN_DQ_BLOCK> SKIP :
+{
+    <<_NEW_LINE> <_IDENTIFIER> (<_SPACE>)* ("," | "#" | "!" | "\\" | "\r" | "\n")>
+    {
+        input_stream.backup(1);
+        if (image.substring(image.charAt(1) > ' ' ? 1 : 2, image.length() - 1).trim().equals(blockEndTag)) {
+            if (textBlock.length() <= 0) {
+                startIndex = 0;
+            }
+            SwitchTo(IN_DQ_BLOCK_END);
+        } else {
+            textBlock.append(image.substring(0, image.length() - 1));
+        }
+    }
+|   <~["$", "\\"]>
+    {
+        textBlock.append(image.charAt(0));
+    }
+|   <"\\" <_ESCAPED_CHAR>>
+    {
+        unescapeChar();
+        textBlock.append(image.charAt(0));
+    }
+|   <"$" ~["{"]>
+    {
+        input_stream.backup(1);
+        textBlock.append(image.charAt(0));
+    }
+}
+
+<IN_DQ_BLOCK> TOKEN :
+{
+    <DQ_BLOCK_PART : <_REF>>
+    {
+        matchedToken.image = textBlock.substring(startIndex);
+        startIndex = 0;
+        textBlock.setLength(0);
+        pushLexState(IN_REFERENCE);
+    }
+}
+
+<IN_DQ_BLOCK_END> TOKEN :
+{
+    <DQ_BLOCK : ~[]>
+    {
+        input_stream.backup(1);
+        matchedToken.image = textBlock.substring(startIndex);
+        startIndex = 0;
+        popLexState();
+    }
+}
+
+/*
+ * 简易串.
+ */
+
+<IN_PRE_VALUES> SKIP :
+{
+    <~[]>
+    {
+        input_stream.backup(1);
+        textBlock.setLength(0);
+        lastNonspaceIndex  = 0;
+        multipartString    = false;
+        SwitchTo(IN_VALUES);
+        pushLexState(IN_SIMPLE_STRING);
+    }
+}
+
+<IN_SIMPLE_STRING> SKIP :
+{
+    <~["$", ",", "#", "!", "\\", "\r", "\n"]>
+    {
+        appendTextBlock(false);
+    }
+|   <"\\" <_ESCAPED_CHAR>>
+    {
+        unescapeChar();
+        appendTextBlock(true);
+    }
+|   <"$" ~["{"]>
+    {
+        input_stream.backup(1);
+        image.setLength(image.length() - 1);
+        appendTextBlock(false);
+    }
+|   "\\" : IN_SIMPLE_STRING_PRE_NEW_LINE
+}
+
+<IN_SIMPLE_STRING_PRE_NEW_LINE> SKIP :
+{
+    <<_SPACE>>
+|   <<_NEW_LINE>> : IN_SIMPLE_STRING_NEW_LINE
+}
+
+<IN_SIMPLE_STRING_NEW_LINE> SKIP :
+{
+    <<_SPACE>>
+|   <~[]>
+    {
+        input_stream.backup(1);
+        textBlock.setLength(lastNonspaceIndex);
+        if (lastNonspaceIndex == 0) {
+            if (multipartString) {
+                textBlock.append(' ');
+            }
+        } else {
+            if (textBlock.charAt(lastNonspaceIndex - 1) > ' ') {
+                textBlock.append(' ');
+            }
+        }
+    } : IN_SIMPLE_STRING
+}
+
+<IN_SIMPLE_STRING> TOKEN :
+{
+    <SIMPLE_STRING_PART : <_REF>>
+    {
+        matchedToken.image = textBlock.toString();
+        textBlock.setLength(0);
+        lastNonspaceIndex = 0;
+        multipartString   = true;
+        pushLexState(IN_REFERENCE);
+    }
+|   <SIMPLE_STRING : <_NEW_LINE> | "," | "#" | "!">
+    {
+        input_stream.backup(1);
+        matchedToken.image = textBlock.substring(0, lastNonspaceIndex);
+        popLexState();
+    }
+}
+
+/*
+ * 引用.
+ */
+
+<IN_REFERENCE> SKIP :
+{
+    <<_SPACE>>
+|   <<_NEW_LINE>>
+|   "}"
+    {
+        popLexState();
+    }
+}
+
+/* ======================================================================
+ * 定义非终结符。
+ * ====================================================================== */
+
+/**
+ * 解析property文件.
+ */
+void Start() : {}
+{
+    (
+        DirectiveDeclare()
+    |   DirectiveInclude()
+    |   DirectiveBase()
+    |	DirectiveName()
+
+    |   PropertyDefinition()
+    )*
+
+    <EOF>
+}
+
+/**
+ * 声明property文件(encoding等).
+ * 这是一个特殊的指令, 只能出现在文件的第一行第一列.
+ * 这条指令不会被handler接收到.
+ */
+void DirectiveDeclare() :
+{ String s; }
+{
+    <DIRECTIVE_DECLARE>
+    {
+        if (token.beginLine != 1 || token.beginColumn != 1) {
+            throw new ParseException(
+                    "The properties declaration may only appear at the very beginning of the document: "
+                    + "Encountered \"" + TokenMgrError.addEscapes(token.image)
+                    + "\" at line " + token.beginLine + ", column " + token.beginColumn + ".");
+        }
+    }
+    [ <ENCODING> <EQUALS> s = StringLiteral() { encoding = s; } ]
+    [ <UESC> { supportUnicodeEscape = true; } ]
+    <CR>
+}
+
+/**
+ * 包含其它文件的指令.
+ */
+void DirectiveInclude() :
+{ String resource; }
+{
+    <DIRECTIVE_INCLUDE>
+    resource = StringLiteral()
+    {
+        try {
+            handler.include(resource);
+        } catch (com.za.common.property.parser.ParseException e) {
+            throw new PassException(e);
+        }
+    }
+    <CR>
+}
+
+/**
+ * 指明property的基.
+ */
+void DirectiveBase() : {}
+{
+    <DIRECTIVE_BASE>
+    {
+        try {
+            handler.startBase();
+        } catch (com.za.common.property.parser.ParseException e) {
+            throw new PassException(e);
+        }
+    }
+    [ Property() ]
+    {
+        try {
+            handler.endBase();
+        } catch (com.za.common.property.parser.ParseException e) {
+            throw new PassException(e);
+        }
+    }
+    <CR>
+}
+
+/**
+ * 指明property文件的名称, 也就是根属性的键值.
+ */
+void DirectiveName() :
+{ String name; }
+{
+    <DIRECTIVE_NAME>
+    name = StringLiteral()
+    {
+        try {
+            handler.setName(name);
+        } catch (com.za.common.property.parser.ParseException e) {
+            throw new PassException(e);
+        }
+    }
+    <CR>
+}
+
+/**
+ * 解析一条property的定义.
+ */
+void PropertyDefinition() : {}
+{
+    {
+        try {
+            handler.startPropertyDefinition();
+        } catch (com.za.common.property.parser.ParseException e) {
+            throw new PassException(e);
+        }
+    }
+    Property() <EQUALS> Value() ( <COMMA> Value() )*
+    {
+        try {
+            handler.endPropertyDefinition();
+        } catch (com.za.common.property.parser.ParseException e) {
+            throw new PassException(e);
+        }
+    }
+    <CR>
+}
+
+/**
+ * 解析一个property.
+ */
+void Property() :
+{ String key; int index = -1; }
+{
+    {
+        try {
+            handler.startProperty();
+        } catch (com.za.common.property.parser.ParseException e) {
+            throw new PassException(e);
+        }
+    }
+    (
+        <VAR>
+        {
+            try {
+                handler.propertyVar(token.image);
+            } catch (com.za.common.property.parser.ParseException e) {
+                throw new PassException(e);
+            }
+        }
+    |   key = StringLiteral()
+        {
+            try {
+                handler.propertyKey(key);
+            } catch (com.za.common.property.parser.ParseException e) {
+                throw new PassException(e);
+            }
+        }
+    |   <LBRACKET> [ index = IntegerLiteral() ] <RBRACKET>
+        {
+            try {
+                handler.propertyIndex(index);
+            } catch (com.za.common.property.parser.ParseException e) {
+                throw new PassException(e);
+            }
+            index = -1;
+        }
+    )
+    (
+        <DOT>
+        (
+            <VAR>
+            {
+                try {
+                    handler.propertyVar(token.image);
+                } catch (com.za.common.property.parser.ParseException e) {
+                    throw new PassException(e);
+                }
+            }
+        |   key = StringLiteral()
+            {
+                try {
+                    handler.propertyKey(key);
+                } catch (com.za.common.property.parser.ParseException e) {
+                    throw new PassException(e);
+                }
+            }
+        )
+    |   <LBRACKET> [ index = IntegerLiteral() ] <RBRACKET>
+        {
+            try {
+                handler.propertyIndex(index);
+            } catch (com.za.common.property.parser.ParseException e) {
+                throw new PassException(e);
+            }
+            index = -1;
+        }
+    )*
+    {
+        try {
+            handler.endProperty();
+        } catch (com.za.common.property.parser.ParseException e) {
+            throw new PassException(e);
+        }
+    }
+}
+
+/**
+ * Property的单个值.
+ */
+void Value() : {}
+{
+    <SQ_STRING>
+    {
+        try {
+            handler.value(token.image);
+        } catch (com.za.common.property.parser.ParseException e) {
+            throw new PassException(e);
+        }
+    }
+
+|   <SQ_BLOCK>
+    {
+        try {
+            handler.value(token.image);
+        } catch (com.za.common.property.parser.ParseException e) {
+            throw new PassException(e);
+        }
+    }
+
+|   (
+        <DQ_STRING_PART>
+        {
+            try {
+                handler.startReference(token.image);
+            } catch (com.za.common.property.parser.ParseException e) {
+                throw new PassException(e);
+            }
+        }
+        Property()
+        {
+            try {
+                handler.endReference();
+            } catch (com.za.common.property.parser.ParseException e) {
+                throw new PassException(e);
+            }
+        }
+    )*
+    <DQ_STRING>
+    {
+        try {
+            handler.value(token.image);
+        } catch (com.za.common.property.parser.ParseException e) {
+            throw new PassException(e);
+        }
+    }
+
+|   (
+        <DQ_BLOCK_PART>
+        {
+            try {
+                handler.startReference(token.image);
+            } catch (com.za.common.property.parser.ParseException e) {
+                throw new PassException(e);
+            }
+        }
+        Property()
+        {
+            try {
+                handler.endReference();
+            } catch (com.za.common.property.parser.ParseException e) {
+                throw new PassException(e);
+            }
+        }
+    )*
+    <DQ_BLOCK>
+    {
+        try {
+            handler.value(token.image);
+        } catch (com.za.common.property.parser.ParseException e) {
+            throw new PassException(e);
+        }
+    }
+
+|   (
+        <SIMPLE_STRING_PART>
+        {
+            try {
+                handler.startReference(token.image);
+            } catch (com.za.common.property.parser.ParseException e) {
+                throw new PassException(e);
+            }
+        }
+        Property()
+        {
+            try {
+                handler.endReference();
+            } catch (com.za.common.property.parser.ParseException e) {
+                throw new PassException(e);
+            }
+        }
+    )*
+    <SIMPLE_STRING>
+    {
+        try {
+            handler.value(token.image);
+        } catch (com.za.common.property.parser.ParseException e) {
+            throw new PassException(e);
+        }
+    }
+}
+
+/**
+ * 取得一个无换行的字符串.
+ */
+String StringLiteral() : {}
+{
+    (
+        <INTEGER_LITERAL>
+    |   <IDENTIFIER>
+    |   <SQ_STRING>
+    |   <DQ_STRING>
+    )
+    {
+        return token.image;
+    }
+}
+
+/**
+ * 取得一个整数.
+ */
+int IntegerLiteral() : {}
+{
+    <INTEGER_LITERAL>
+    {
+        return Integer.decode(token.image).intValue();
+    }
+}

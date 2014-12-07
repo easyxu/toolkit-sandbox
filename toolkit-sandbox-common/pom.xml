@@ -1,0 +1,314 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <artifactId>toolkit-sandbox</artifactId>
+        <groupId>com.phoenix</groupId>
+        <version>1.0-SNAPSHOT</version>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+
+    <artifactId>toolkit-sandbox-common</artifactId>
+    <packaging>jar</packaging>
+
+    <name>toolkit-sandbox-common</name>
+    <url>http://maven.apache.org</url>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.11</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>${guava.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.phoenix</groupId>
+            <artifactId>toolkit-sandbox-core</artifactId>
+            <version>${project.parent.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jdk7</artifactId>
+            <version>${jackson.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-core</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-databind</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.velocity</groupId>
+            <artifactId>velocity</artifactId>
+            <version>${velocity.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>${slf4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+            <version>${log4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>javax.servlet</groupId>
+            <artifactId>javax.servlet-api</artifactId>
+            <version>3.1.0</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>javax.servlet.jsp</groupId>
+            <artifactId>javax.servlet.jsp-api</artifactId>
+            <version>2.3.1</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+            <version>${commons-lang3.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>commons-configuration</groupId>
+            <artifactId>commons-configuration</artifactId>
+            <version>1.8</version>
+            <optional>true</optional>
+            <exclusions>
+                <exclusion>
+                    <groupId>commons-logging</groupId>
+                    <artifactId>commons-logging</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>2.4</version>
+        </dependency>
+        <dependency>
+            <groupId>commons-beanutils</groupId>
+            <artifactId>commons-beanutils</artifactId>
+            <version>1.9.2</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>commons-logging</groupId>
+                    <artifactId>commons-logging</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-collections4</artifactId>
+            <version>4.0</version>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-jexl</artifactId>
+            <version>2.1.1</version>
+            <optional>true</optional>
+            <exclusions>
+                <exclusion>
+                    <groupId>commons-logging</groupId>
+                    <artifactId>commons-logging</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>commons-jexl</groupId>
+            <artifactId>commons-jexl</artifactId>
+            <version>1.1</version>
+            <optional>true</optional>
+            <exclusions>
+                <exclusion>
+                    <groupId>commons-logging</groupId>
+                    <artifactId>commons-logging</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.thoughtworks.xstream</groupId>
+            <artifactId>xstream</artifactId>
+            <version>1.4.7</version>
+        </dependency>
+        <dependency>
+            <groupId>dom4j</groupId>
+            <artifactId>dom4j</artifactId>
+            <version>1.6.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.javassist</groupId>
+            <artifactId>javassist</artifactId>
+            <version>3.16.1-GA</version>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+            <version>${spring.version}</version>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.safehaus</groupId>
+            <artifactId>uuid</artifactId>
+            <version>2.0.0</version>
+            <scope>system</scope>
+            <systemPath>${basedir}/lib/jug-lgpl-2.0.0.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>jakarta-regexp</groupId>
+            <artifactId>jakarta-regexp</artifactId>
+            <version>2.0.8</version>
+            <scope>system</scope>
+            <systemPath>${basedir}/lib/jakarta-regexp-1.5.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>apache-oro</groupId>
+            <artifactId>jakarta-oro</artifactId>
+            <version>2.0.8</version>
+            <scope>system</scope>
+            <systemPath>${basedir}/lib/jakarta-oro-2.0.8.jar</systemPath>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>1.7</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>yguard</groupId>
+                        <artifactId>yguard</artifactId>
+                        <version>v2.4</version>
+                        <scope>system</scope>
+                        <systemPath>${basedir}/lib/yguard.jar</systemPath>
+                    </dependency>
+                </dependencies>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <configuration>
+                            <tasks>
+                                <property name="compile_classpath" refid="maven.compile.classpath" />
+                                <property name="runtime_classpath" refid="maven.runtime.classpath" />
+                                <property name="test_classpath" refid="maven.test.classpath" />
+                                <property name="plugin_classpath" refid="maven.plugin.classpath" />
+
+                                <echo message="compile classpath: ${compile_classpath}" />
+                                <echo message="runtime classpath: ${runtime_classpath}" />
+                                <echo message="test classpath:    ${test_classpath}" />
+                                <echo message="plugin classpath:  ${plugin_classpath}" />
+                                <taskdef name="yguard" classname="com.yworks.yguard.YGuardTask"
+                                         classpath="${basedir}/lib/yguard.jar" />
+                                <yguard>
+                                    <!-- <externalclasses refid="compile_classpath"> </externalclasses> -->
+                                    <!-- There are some external libraries used - Maven knows details. -->
+                                    <externalclasses>
+                                        <pathelement path="${compile_classpath}" />
+                                    </externalclasses>
+                                    <inoutpair
+                                            in="target/${project.build.finalName}.${project.packaging}"
+                                            out="target/${project.build.finalName}.jar" />
+                                    <!-- 不同工程需要修改的地方 -->
+                                    <obfuscate logfile="target/yguard.log.xml"
+                                               replaceclassnamestrings="true"
+                                               shrinklog="${project.auto.deploy.dir}/yguard.log.xml">
+                                        <!-- 有错误时将中断该targe t -->
+                                        <property name="error-checking" value="pedantic" />
+                                        <property name="language-conformity" value="illegal" />
+                                        <!-- 采用混合方式产生名字 -->
+                                        <property name="naming-scheme" value="MIX" />
+                                        <!--<property name="expose-attributes" value=""/> -->
+                                        <!--设置需要暴露哪些信息，这些信息将不会被混淆 -->
+                                        <expose>
+
+                                            <!--仅保持类名不变，完全混淆类的其他信息 -->
+                                            <class classes="private" methods="private" fields="none">
+                                                <patternset id="commons">
+                                                    <exclude name="**/regexp/**" />
+                                                    <exclude name="**/resource/**" />
+                                                    <include name="**/lang/ByteArray" />
+                                                    <include name="**/spring/**" />
+                                                    <include name="**/convert/**" />
+                                                    <include name="**/reflect/ClassUtils" />
+                                                    <include name="**/reflect/ReflectionUtils" />
+                                                    <include name="**/lang/StringUtil" />
+                                                    <include name="**/lang/GUIDUtil" />
+                                                    <include name="**/lang/DateUtil" />
+                                                    <include name="**/lang/ByteArray" />
+                                                    <include name="**/lang/ExceptionUtil" />
+                                                    <include name="**/lang/io/ByteArrayOutputStream" />
+                                                    <include name="**/lang/exception/**" />
+                                                    <include name="**/lang/ClassUtil" />
+                                                    <include name="**/file/FileUtil" />
+                                                    <include name="**/file/FileCopyUtils" />
+                                                    <include name="**/security/SecurityBase" />
+                                                </patternset>
+                                            </class>
+
+
+                                            <!-- 保持所有的属性(过时的方法，文件名，行号、本地变量表)，在系统允许过程中，可能会发生错误信息， 如果不保存这些信息，出错时很难跟踪代码，为方便调试保留了这些信息 -->
+                                            <attribute
+                                                    name="Deprecated, SourceFile, LineNumberTable, LocalVariableTable">
+                                                <patternset refid="commons" />
+                                            </attribute>
+                                        </expose>
+
+                                        <!--设置所有用到得第三方库，不混淆它们 -->
+
+
+
+
+
+                                        <!--调整jar包的资源文件中的引用的类名 -->
+                                        <adjust replaceContent="true" replaceName="true">
+                                            <include name="**/*.xml" />
+                                            <include name="**/*.hbm.xml" />
+                                            <include name="./**/*.xml" />
+                                            <include name="./**/*.hbm.xml" />
+                                            <include name="**/*.properties" />
+                                            <include name="./**/*.properties" />
+                                        </adjust>
+
+                                    </obfuscate>
+
+                                </yguard>
+                            </tasks>
+                        </configuration>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
