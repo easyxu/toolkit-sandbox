@@ -173,6 +173,7 @@
                                                     <include name="com.phoenix.dal.hibernate.impl.BaseDaoImpl" />
                                                     <include name="com.phoenix.dal.hibernate4.HibernateDaoSupport" />
                                                     <include name="com.phoenix.dal.HibernateDao" />
+                                                    <include name="com.phoenix.dal.jpa.JpaDaoSupport" />
                                                     <include name="com.phoenix.model.Pager" />
                                                 </patternset>
                                             </class>
