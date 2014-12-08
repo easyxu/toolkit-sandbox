@@ -20,10 +20,8 @@ import javax.persistence.EntityManager;
 @SuppressWarnings("unchecked")
 public class DynaClassResultTransformer<T> implements ResultTransformer {
 
-    /**
-     *
-     */
-    private static final long serialVersionUID = 6137782890170818570L;
+
+    private static final long serialVersionUID = 8561854659569758590L;
 
     private Class<?> tClazz;
     public DynaClassResultTransformer(Class<?> clazz){
