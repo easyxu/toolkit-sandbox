@@ -4,7 +4,7 @@
 
   <groupId>com.phoenix</groupId>
   <artifactId>toolkit-sandbox</artifactId>
-  <version>0.4.RELEASE</version>
+  <version>0.4.1.RELEASE</version>
   <modules>
     <module>toolkit-sandbox-core</module>
     <module>toolkit-sandbox-common</module>
@@ -18,8 +18,8 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <!--  file:///home/xux/git/repository-->
-    <deploy.url>file://E:/GitHub/repository</deploy.url>
+    <!--  file:///home/xux/git/repository file://E:/GitHub/repository-->
+    <deploy.url>file:///home/xux/git_clone/repository</deploy.url>
     <java.version>1.7</java.version>
     <guava.version>18.0</guava.version>
     <slf4j.version>1.7.7</slf4j.version>
@@ -30,6 +30,19 @@
     <spring.version>4.1.2.RELEASE</spring.version>
     <velocity.version>1.7</velocity.version>
   </properties>
+
+  <repositories>
+    <repository>
+      <id>repository.jboss.org-public</id>
+      <name>JBoss.org Maven repository</name>
+      <url>https://repository.jboss.org/nexus/content/groups/public</url>
+    </repository>
+    <repository>
+      <id>buzzxu-github-repository</id>
+      <name>buzzxu github Repository</name>
+      <url>https://raw.github.com/buzzxu/repository/master</url>
+    </repository>
+  </repositories>
   <distributionManagement>
     <repository>
       <id>buzzxu-maven-repository</id>
